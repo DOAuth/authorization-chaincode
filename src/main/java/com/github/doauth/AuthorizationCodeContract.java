@@ -3,19 +3,20 @@
  */
 package com.github.doauth;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.contract.ContractInterface;
-import org.hyperledger.fabric.contract.annotation.Contract;
-import org.hyperledger.fabric.contract.annotation.Default;
-import org.hyperledger.fabric.contract.annotation.Transaction;
-import org.hyperledger.fabric.contract.annotation.Contact;
-import org.hyperledger.fabric.contract.annotation.Info;
-import org.hyperledger.fabric.contract.annotation.License;
+import org.hyperledger.fabric.contract.annotation.*;
+
+import java.net.URI;
+import java.util.*;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Contract(name = "AuthorizationCodeContract",
     info = @Info(title = "AuthorizationCode contract",
-                description = "My Smart Contract",
+                description = "smart contract to issue and manage authorization code",
                 version = "0.0.1",
                 license =
                         @License(name = "Apache-2.0",
@@ -25,56 +26,71 @@ import static java.nio.charset.StandardCharsets.UTF_8;
                                                 url = "http://authorization-blockchain.me")))
 @Default
 public class AuthorizationCodeContract implements ContractInterface {
-    public AuthorizationCodeContract() {
 
-    }
     @Transaction()
-    public boolean authorizationCodeExists(Context ctx, String authorizationCodeId) {
-        byte[] buffer = ctx.getStub().getState(authorizationCodeId);
+    public boolean authorizationCodeExists(Context ctx, String id) {
+        byte[] buffer = ctx.getStub().getState(id);
         return (buffer != null && buffer.length > 0);
     }
 
     @Transaction()
-    public void createAuthorizationCode(Context ctx, String authorizationCodeId, String value) {
-        boolean exists = authorizationCodeExists(ctx,authorizationCodeId);
-        if (exists) {
-            throw new RuntimeException("The asset "+authorizationCodeId+" already exists");
+    public String createAuthorizationCode(
+            Context ctx,
+            String clientId,
+            String paramRedirectUri,
+            String paramScopes,
+            String subject,
+            String nonce,
+            String codeChallenge,
+            String codeChallengeMethod) {
+
+        URI redirectUri = URI.create(paramRedirectUri);
+        Set<String> scopes
+                = new HashSet<>(this.toList(paramScopes));
+
+        String code = RandomStringUtils.random(32, true, true);
+
+        AuthorizationCode authorizationCode
+                = new AuthorizationCode(clientId, redirectUri, scopes, code, subject, nonce, codeChallenge, codeChallengeMethod);
+
+        try {
+            ctx.getStub().putState(code, authorizationCode.toJSONString().getBytes(UTF_8));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
         }
-        AuthorizationCode asset = new AuthorizationCode();
-        asset.setValue(value);
-        ctx.getStub().putState(authorizationCodeId, asset.toJSONString().getBytes(UTF_8));
+
+
+        return code;
     }
 
     @Transaction()
-    public AuthorizationCode readAuthorizationCode(Context ctx, String authorizationCodeId) {
-        boolean exists = authorizationCodeExists(ctx,authorizationCodeId);
-        if (!exists) {
-            throw new RuntimeException("The asset "+authorizationCodeId+" does not exist");
+    public AuthorizationCode readAuthorizationCode(Context ctx, String code) {
+
+        if (!authorizationCodeExists(ctx, code)) {
+            throw new RuntimeException("The authorization code " + code + " does not exist");
         }
 
-        AuthorizationCode newAsset = AuthorizationCode.fromJSONString(new String(ctx.getStub().getState(authorizationCodeId),UTF_8));
-        return newAsset;
+        try {
+            return AuthorizationCode.fromJSONString(new String(ctx.getStub().getState(code), UTF_8));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     @Transaction()
-    public void updateAuthorizationCode(Context ctx, String authorizationCodeId, String newValue) {
-        boolean exists = authorizationCodeExists(ctx,authorizationCodeId);
-        if (!exists) {
-            throw new RuntimeException("The asset "+authorizationCodeId+" does not exist");
-        }
-        AuthorizationCode asset = new AuthorizationCode();
-        asset.setValue(newValue);
+    public String deleteAuthorizationCode(Context ctx, String code) {
 
-        ctx.getStub().putState(authorizationCodeId, asset.toJSONString().getBytes(UTF_8));
+        if (!authorizationCodeExists(ctx, code)) {
+            throw new RuntimeException("The authorization code "+ code + " does not exist");
+        }
+
+        ctx.getStub().delState(code);
+        return code;
     }
 
-    @Transaction()
-    public void deleteAuthorizationCode(Context ctx, String authorizationCodeId) {
-        boolean exists = authorizationCodeExists(ctx,authorizationCodeId);
-        if (!exists) {
-            throw new RuntimeException("The asset "+authorizationCodeId+" does not exist");
-        }
-        ctx.getStub().delState(authorizationCodeId);
+    private List<String> toList(String s) {
+        List<String> list = Arrays.asList(s.substring(1, s.length() - 1).split(", "));
+        return list.get(0).length() == 0 ? new ArrayList<>() : list;
     }
-
 }

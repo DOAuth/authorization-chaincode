@@ -3,50 +3,52 @@
  */
 
 package com.github.doauth;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-import java.nio.charset.StandardCharsets;
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.shim.ChaincodeStub;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public final class AuthorizationCodeContractTest {
 
     @Nested
-    class AssetExists {
-        @Test
-        public void noProperAsset() {
+    class AuthorizationCodeExists {
 
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
+        @Test
+        public void noProperAuthorizationCode() {
+
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
-
             when(stub.getState("10001")).thenReturn(new byte[] {});
+
+            AuthorizationCodeContract contract = new AuthorizationCodeContract();
             boolean result = contract.authorizationCodeExists(ctx,"10001");
 
             assertFalse(result);
         }
 
         @Test
-        public void assetExists() {
+        public void authorizationCodeExists() {
 
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
-
             when(stub.getState("10001")).thenReturn(new byte[] {42});
+
+            AuthorizationCodeContract contract = new AuthorizationCodeContract();
             boolean result = contract.authorizationCodeExists(ctx,"10001");
 
             assertTrue(result);
@@ -55,120 +57,78 @@ public final class AuthorizationCodeContractTest {
 
         @Test
         public void noKey() {
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
-
             when(stub.getState("10002")).thenReturn(null);
+
+            AuthorizationCodeContract contract = new AuthorizationCodeContract();
             boolean result = contract.authorizationCodeExists(ctx,"10002");
 
             assertFalse(result);
-
         }
 
     }
 
     @Nested
-    class AssetCreates {
+    class AuthorizationCodeCreates {
 
         @Test
-        public void newAssetCreate() {
+        public void newAuthorizationCodeCreate() {
+
+            Context ctx = mock(Context.class);
+            ChaincodeStub stub = mock(ChaincodeStub.class);
+            when(ctx.getStub()).thenReturn(stub);
+
+            AuthorizationCodeContract contract = new AuthorizationCodeContract();
+
+            String clientId = "clientId";
+            String paramRedirectUri = "https://doauth.com";
+            String paramScopes = Arrays.asList("profile", "friends").toString();
+            String subject = "userId";
+            String nonce = "1010";
+            String codeChallenge = "1010";
+            String codeChallengeMethod = "method";
+
+            String code = contract.createAuthorizationCode(
+                    ctx, clientId, paramRedirectUri, paramScopes, subject, nonce, codeChallenge, codeChallengeMethod);
+
+            System.out.println(code);
+        }
+
+        @Test
+        public void AuthorizationCodeRead() throws Exception {
             AuthorizationCodeContract contract = new AuthorizationCodeContract();
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
 
-            String json = "{\"value\":\"TheAuthorizationCodeContract\"}";
+            String clientId = "client_id";
+            URI redirectUri = URI.create("https://doauth.com");
+            Set<String> scopes = new HashSet<>(2);
+            scopes.add("profile");
+            scopes.add("friends");
+            String code = RandomStringUtils.random(32, true, true);
+            String subject = "user_id";
+            String nonce = "1010";
+            String codeChallenge = "1010";
+            String codeChallengeMethod = "method";
+            AuthorizationCode authorizationCode
+                    = new AuthorizationCode(clientId, redirectUri, scopes, code, subject, nonce, codeChallenge, codeChallengeMethod);
 
-            contract.createAuthorizationCode(ctx, "10001", "TheAuthorizationCodeContract");
+            String json;
+            try {
+                json = authorizationCode.toJSONString();
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
 
-            verify(stub).putState("10001", json.getBytes(UTF_8));
+            when(stub.getState(code)).thenReturn(json.getBytes(UTF_8));
+            System.out.println("Expected: " + json);
+
+            AuthorizationCode returnedCode = contract.readAuthorizationCode(ctx, code);
+            System.out.println("Actual: " + returnedCode.toJSONString());
+            assertEquals(returnedCode.getCode(), authorizationCode.getCode());
         }
-
-        @Test
-        public void alreadyExists() {
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
-            Context ctx = mock(Context.class);
-            ChaincodeStub stub = mock(ChaincodeStub.class);
-            when(ctx.getStub()).thenReturn(stub);
-
-            when(stub.getState("10002")).thenReturn(new byte[] { 42 });
-
-            Exception thrown = assertThrows(RuntimeException.class, () -> {
-                contract.createAuthorizationCode(ctx, "10002", "TheAuthorizationCodeContract");
-            });
-
-            assertEquals(thrown.getMessage(), "The asset 10002 already exists");
-
-        }
-
     }
-
-    @Test
-    public void assetRead() {
-        AuthorizationCodeContract contract = new AuthorizationCodeContract();
-        Context ctx = mock(Context.class);
-        ChaincodeStub stub = mock(ChaincodeStub.class);
-        when(ctx.getStub()).thenReturn(stub);
-
-        AuthorizationCode asset = new AuthorizationCode();
-        asset.setValue("Valuable");
-
-        String json = asset.toJSONString();
-        when(stub.getState("10001")).thenReturn(json.getBytes(StandardCharsets.UTF_8));
-
-        AuthorizationCode returnedAsset = contract.readAuthorizationCode(ctx, "10001");
-        assertEquals(returnedAsset.getValue(), asset.getValue());
-    }
-
-    @Nested
-    class AssetUpdates {
-        @Test
-        public void updateExisting() {
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
-            Context ctx = mock(Context.class);
-            ChaincodeStub stub = mock(ChaincodeStub.class);
-            when(ctx.getStub()).thenReturn(stub);
-            when(stub.getState("10001")).thenReturn(new byte[] { 42 });
-
-            contract.updateAuthorizationCode(ctx, "10001", "updates");
-
-            String json = "{\"value\":\"updates\"}";
-            verify(stub).putState("10001", json.getBytes(UTF_8));
-        }
-
-        @Test
-        public void updateMissing() {
-            AuthorizationCodeContract contract = new AuthorizationCodeContract();
-            Context ctx = mock(Context.class);
-            ChaincodeStub stub = mock(ChaincodeStub.class);
-            when(ctx.getStub()).thenReturn(stub);
-
-            when(stub.getState("10001")).thenReturn(null);
-
-            Exception thrown = assertThrows(RuntimeException.class, () -> {
-                contract.updateAuthorizationCode(ctx, "10001", "TheAuthorizationCodeContract");
-            });
-
-            assertEquals(thrown.getMessage(), "The asset 10001 does not exist");
-        }
-
-    }
-
-    @Test
-    public void assetDelete() {
-        AuthorizationCodeContract contract = new AuthorizationCodeContract();
-        Context ctx = mock(Context.class);
-        ChaincodeStub stub = mock(ChaincodeStub.class);
-        when(ctx.getStub()).thenReturn(stub);
-        when(stub.getState("10001")).thenReturn(null);
-
-        Exception thrown = assertThrows(RuntimeException.class, () -> {
-            contract.deleteAuthorizationCode(ctx, "10001");
-        });
-
-        assertEquals(thrown.getMessage(), "The asset 10001 does not exist");
-    }
-
 }
