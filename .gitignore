@@ -1,0 +1,20 @@
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+/.classpath
+/.gradle/
+/.project
+/.settings/
+/bin/
+/build/
+/.idea/
+/.vscode/
+/out/
+/transaction_data/
+.fabricignore
+
+.DS_Store
+
+
+
