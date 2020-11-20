@@ -1,8 +1,9 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  */
-package com.github.doauth;
+package com.github.doauth.authorizationchaincode;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.contract.ContractInterface;
 import org.hyperledger.fabric.contract.annotation.*;
@@ -38,7 +39,13 @@ public class AccessTokenContract implements ContractInterface {
         }
         AccessToken asset = new AccessToken();
         asset.setValue(value);
-        ctx.getStub().putState(id, asset.toJSONString().getBytes(UTF_8));
+
+        try {
+            ctx.getStub().putState(id, asset.toJSONString().getBytes(UTF_8));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+
     }
 
     @Transaction()
@@ -48,8 +55,14 @@ public class AccessTokenContract implements ContractInterface {
             throw new RuntimeException("The asset "+id+" does not exist");
         }
 
-        AccessToken newAsset = AccessToken.fromJSONString(new String(ctx.getStub().getState(id),UTF_8));
-        return newAsset;
+        AccessToken accessToken = null;
+        try {
+            accessToken = AccessToken.fromJSONString(new String(ctx.getStub().getState(id),UTF_8));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+
+        return accessToken;
     }
 
     @Transaction()
@@ -61,7 +74,11 @@ public class AccessTokenContract implements ContractInterface {
         AccessToken asset = new AccessToken();
         asset.setValue(newValue);
 
-        ctx.getStub().putState(id, asset.toJSONString().getBytes(UTF_8));
+        try {
+            ctx.getStub().putState(id, asset.toJSONString().getBytes(UTF_8));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
     }
 
     @Transaction()
